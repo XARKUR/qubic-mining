@@ -78,11 +78,22 @@ RISK_SUMMARY=()
 CONFIG_CONTENT=""
 SEEN_OPTIONS=()
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+GREEN="" YELLOW="" BLUE="" HEADING="" NC=""
+PROMPT_COLOR="" ERROR_COLOR="" STDERR_NC=""
+if [[ -z "${NO_COLOR+x}" && "${TERM:-dumb}" != "dumb" ]]; then
+  if [[ -t 1 ]]; then
+    GREEN=$'\033[32m'
+    YELLOW=$'\033[33m'
+    BLUE=$'\033[36m'
+    HEADING=$'\033[1;36m'
+    NC=$'\033[0m'
+  fi
+  if [[ -t 2 ]]; then
+    PROMPT_COLOR=$'\033[1;36m'
+    ERROR_COLOR=$'\033[31m'
+    STDERR_NC=$'\033[0m'
+  fi
+fi
 
 usage() {
   if is_zh; then
@@ -191,16 +202,39 @@ thread_mode_label() {
   esac
 }
 
+switch_label() {
+  case "$1:$2" in
+    1:zh) printf '开启' ;;
+    0:zh) printf '关闭' ;;
+    1:en) printf 'on' ;;
+    0:en) printf 'off' ;;
+  esac
+}
+
 info() {
-  echo -e "${GREEN}$*${NC}"
+  printf '%b%s%b\n' "$GREEN" "$*" "$NC"
 }
 
 warn() {
-  echo -e "${YELLOW}$*${NC}"
+  printf '%b%s%b\n' "$YELLOW" "$*" "$NC"
 }
 
 err() {
-  echo -e "${RED}$*${NC}" >&2
+  printf '%b%s%b\n' "$ERROR_COLOR" "$*" "$STDERR_NC" >&2
+}
+
+section() {
+  printf '\n%b%s%b\n' "$HEADING" "$*" "$NC"
+}
+
+step() {
+  printf '%b%s%b\n' "$BLUE" "$*" "$NC"
+}
+
+read_answer() {
+  local answer_name="$1" question_text="$2"
+  printf '%b%s%b' "$PROMPT_COLOR" "$question_text" "$STDERR_NC" >&2
+  read -r "$answer_name"
 }
 
 record_option() {
@@ -495,10 +529,11 @@ save_language_preference() {
 select_language_interactive() {
   local choice
   while true; do
-    echo "请选择语言 / Choose language:"
+    section "请选择语言 / Choose language"
     echo "1. 中文"
     echo "2. English"
-    if ! read -r -p "> " choice; then
+    echo "0. 退出 / Exit"
+    if ! read_answer choice "$(msg '选择 [0-2]: ' 'Select [0-2]: ')"; then
       echo
       err "输入已结束，安装已取消。 / Input closed; installation cancelled."
       exit 1
@@ -512,8 +547,9 @@ select_language_interactive() {
         LANG_CHOICE="en"
         return 0
         ;;
+      0) exit 0 ;;
       *)
-        echo "请输入 1 或 2。 / Please enter 1 or 2."
+        err "请输入 0-2。 / Please enter 0-2."
         ;;
     esac
   done
@@ -573,20 +609,20 @@ ask() {
 
   while true; do
     if [[ -n "$default" ]]; then
-      if ! read -r -p "$prompt [$default]: " value; then
+      if ! read_answer value "$prompt [$default]: "; then
         echo
         err "$(msg '输入已结束，安装已取消。' 'Input closed; installation cancelled.')"
         exit 1
       fi
       value="${value:-$default}"
     else
-      if ! read -r -p "$prompt: " value; then
+      if ! read_answer value "$prompt: "; then
         echo
         err "$(msg '输入已结束，安装已取消。' 'Input closed; installation cancelled.')"
         exit 1
       fi
     fi
-    if [[ "$required" -eq 0 || -n "$value" ]]; then
+    if [[ "$required" -eq 0 || -n "$(trim "$value")" ]]; then
       printf -v "$var_name" '%s' "$value"
       return 0
     fi
@@ -598,34 +634,43 @@ ask_yes_no() {
   local prompt="$1"
   local default_yes="${2:-0}"
   local value=""
+  local choices
 
   if [[ "$AUTO_YES" -eq 1 ]]; then
     return 0
   fi
 
   if [[ "$default_yes" -eq 1 ]]; then
-    if ! read -r -p "$prompt [Y/n]: " value; then
-      echo
-      err "$(msg '输入已结束，操作已取消。' 'Input closed; action cancelled.')"
-      exit 1
-    fi
-    value="${value:-y}"
+    choices='[Y/n]'
   else
-    if ! read -r -p "$prompt [y/N]: " value; then
-      echo
-      err "$(msg '输入已结束，操作已取消。' 'Input closed; action cancelled.')"
-      exit 1
-    fi
-    value="${value:-n}"
+    choices='[y/N]'
   fi
 
-  value="${value,,}"
-  [[ "$value" == "y" || "$value" == "yes" ]]
+  while true; do
+    if ! read_answer value "$prompt $choices: "; then
+      echo
+      err "$(msg '输入已结束，操作已取消。' 'Input closed; action cancelled.')"
+      exit 1
+    fi
+    value="$(trim "$value")"
+    value="${value,,}"
+    case "$value" in
+      y|yes|是) return 0 ;;
+      n|no|否) return 1 ;;
+      '')
+        if [[ "$default_yes" -eq 1 ]]; then
+          return 0
+        fi
+        return 1
+        ;;
+      *) err "$(msg '请输入 y 或 n。' 'Please enter y or n.')" ;;
+    esac
+  done
 }
 
 ensure_dir() {
   local dir="$1"
-  echo -e "${YELLOW}mkdir -p $(printf '%q' "$dir")${NC}"
+  step "mkdir -p $(printf '%q' "$dir")"
   if [[ "$DRY_RUN" -eq 0 ]]; then
     if ! mkdir -p -- "$dir"; then
       err "$(msg '无法创建目录:' 'Could not create directory:') $dir"
@@ -638,7 +683,7 @@ write_file() {
   local path="$1"
   local content="$2"
   local dir tmp backup
-  echo -e "${BLUE}write: $path${NC}"
+  step "$(msg '写入文件' 'Write file'): $path"
   [[ "$DRY_RUN" -eq 1 ]] && return 0
 
   if [[ -L "$path" ]]; then
@@ -1261,7 +1306,7 @@ show_status() {
 
 tail_log() {
   local path="$1"
-  echo -e "${YELLOW}tail -f $(printf '%q' "$path")${NC}"
+  step "tail -f $(printf '%q' "$path")"
   if [[ "$DRY_RUN" -eq 1 ]]; then
     return 0
   fi
@@ -1391,12 +1436,12 @@ stop_pool_processes() {
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
       if [[ "$pool" == "qli" || "$pool" == "minerlab" ]]; then
-        echo -e "${YELLOW}kill -s INT -- $target # $(pool_label "$pool"): $target_en${NC}"
-        echo -e "${YELLOW}kill -s TERM -- $target # $(msg '仅在 INT 超时后' 'only if INT times out')${NC}"
+        step "kill -s INT -- $target # $(pool_label "$pool"): $target_en"
+        step "kill -s TERM -- $target # $(msg '仅在 INT 超时后' 'only if INT times out')"
       else
-        echo -e "${YELLOW}kill -s TERM -- $target # $(pool_label "$pool"): $target_en${NC}"
+        step "kill -s TERM -- $target # $(pool_label "$pool"): $target_en"
       fi
-      echo -e "${YELLOW}kill -s KILL -- $target # $(msg '仅在正常停止超时后' 'only if graceful stop times out')${NC}"
+      step "kill -s KILL -- $target # $(msg '仅在正常停止超时后' 'only if graceful stop times out')"
       continue
     fi
 
@@ -1510,8 +1555,7 @@ manage_existing_miners() {
 
   detected="$(detect_running_pool || true)"
   while true; do
-    echo
-    info "$(msg '检测到已有 miner 正在运行' 'Existing miner is running')"
+    section "$(msg '检测到已有 miner 正在运行' 'Existing miner is running')"
     [[ -n "$detected" ]] && echo "$(msg '识别矿池' 'Detected pool'): $(pool_label "$detected")"
     msg '请选择操作：' 'Choose an action:'
     echo "1. $(msg '查看状态' 'Show status')"
@@ -1519,7 +1563,7 @@ manage_existing_miners() {
     echo "3. $(msg '停止运行中的 miner' 'Stop running miner')"
     echo "4. $(msg '继续安装/切换矿池' 'Continue install/switch pool')"
     echo "5. $(msg '退出' 'Exit')"
-    if ! read -r -p "> " choice; then
+    if ! read_answer choice "$(msg '选择 [1-5]: ' 'Select [1-5]: ')"; then
       echo
       err "$(msg '输入已结束，操作已取消。' 'Input closed; action cancelled.')"
       exit 1
@@ -1575,7 +1619,7 @@ running_as_root() {
 }
 
 environment_check() {
-  info "$(msg '环境检查' 'Environment check')"
+  section "$(msg '环境检查' 'Environment check')"
   local os arch missing=()
   os="$(uname -s 2>/dev/null || echo unknown)"
   arch="$(uname -m 2>/dev/null || echo unknown)"
@@ -1681,11 +1725,12 @@ validate_mutation_paths() {
 select_pool_interactive() {
   local choice
   while true; do
-    msg '请选择要安装的矿池：' 'Choose pool to install:'
+    section "$(msg '请选择要安装的矿池' 'Choose pool to install')"
     echo "1. QLI"
     echo "2. JetSki"
     echo "3. Minerlab"
-    if ! read -r -p "> " choice; then
+    echo "0. $(msg '退出' 'Exit')"
+    if ! read_answer choice "$(msg '选择 [0-3]: ' 'Select [0-3]: ')"; then
       echo
       err "$(msg '输入已结束，安装已取消。' 'Input closed; installation cancelled.')"
       exit 1
@@ -1694,7 +1739,8 @@ select_pool_interactive() {
       1) POOL="qli"; return ;;
       2) POOL="jetski"; return ;;
       3) POOL="minerlab"; return ;;
-      *) err "$(msg '请输入 1-3。' 'Please enter 1-3.')" ;;
+      0) exit 0 ;;
+      *) err "$(msg '请输入 0-3。' 'Please enter 0-3.')" ;;
     esac
   done
 }
@@ -1941,18 +1987,14 @@ prepare_qli() {
   START_ARGS=("$MINER_BINARY_PATH")
   set_command_displays
 
-  add_action "下载: ${DOWNLOAD_URLS[0]}" "Download: ${DOWNLOAD_URLS[0]}"
-  add_action "写入配置: $CONFIG_PATH" "Write config: $CONFIG_PATH"
-  add_action "矿工名: $WORKER_NAME" "Worker: $WORKER_NAME"
-  add_action "线程: $THREADS ($(thread_mode_label "$THREAD_MODE"))" "Threads: $THREADS ($(thread_mode_label "$THREAD_MODE"))"
   add_action "身份字段: $token_key" "Identity field: $token_key"
   if [[ "$qli_pps" == "1" ]]; then
     add_action "矿池模式: PPS" "Pool mode: PPS"
   else
     add_action "矿池模式: SOLO" "Pool mode: SOLO"
   fi
-  add_action "CPU trainer: $qli_cpu" "CPU trainer: $qli_cpu"
-  add_action "GPU trainer: $qli_gpu" "GPU trainer: $qli_gpu"
+  add_action "CPU 训练器: $(switch_label "$qli_cpu" zh)" "CPU trainer: $(switch_label "$qli_cpu" en)"
+  add_action "GPU 训练器: $(switch_label "$qli_gpu" zh)" "GPU trainer: $(switch_label "$qli_gpu" en)"
   [[ -n "$qli_gpu_version" ]] && add_action "GPU 版本: $qli_gpu_version" "GPU version: $qli_gpu_version"
   [[ -n "$qli_gpu_cards" ]] && add_action "GPU cards: $qli_gpu_cards" "GPU cards: $qli_gpu_cards"
   [[ -n "$cpu_version_json" ]] && add_action "CPU 版本: AVX2" "CPU version: AVX2"
@@ -2152,17 +2194,14 @@ prepare_jetski() {
   jetski_digest="$(github_release_asset_sha256 "${DOWNLOAD_URLS[0]}" || true)"
   if [[ -n "$jetski_digest" ]]; then
     set_download_trust "${DOWNLOAD_URLS[0]}" "$jetski_digest" "GitHub release digest"
-    add_action "校验来源: GitHub release digest" "Verification source: GitHub release digest"
   else
     jetski_hash_digest="$(jetski_release_sha256 "$jetski_mode" || true)"
     if [[ -n "$jetski_hash_digest" ]]; then
       set_download_trust "${DOWNLOAD_URLS[0]}" "$jetski_hash_digest" "JetSki official .hash"
-      add_action "校验来源: JetSki 官方 .hash" "Verification source: JetSki official .hash"
     else
       jetski_pinned_digest="$(expected_archive_sha256 "${DOWNLOAD_URLS[0]}" || true)"
       if [[ -n "$jetski_pinned_digest" ]]; then
         set_download_trust "${DOWNLOAD_URLS[0]}" "$jetski_pinned_digest" "installer pinned SHA-256"
-        add_action "校验来源: 安装器内置 SHA-256" "Verification source: installer pinned SHA-256"
       else
         warn "$(msg 'JetSki 未提供可读取的远端 hash，将使用官方 GitHub Release 地址并记录本地 SHA-256。' 'No readable JetSki remote hash is available; the official GitHub Release URL will be used and a local SHA-256 will be recorded.')"
       fi
@@ -2179,13 +2218,10 @@ prepare_jetski() {
   SETUP_ARGS=("$MINER_BINARY_PATH" "${args[@]}")
   START_ARGS=("$MINER_BINARY_PATH" "-start")
   set_command_displays
-  add_action "下载: ${DOWNLOAD_URLS[0]}" "Download: ${DOWNLOAD_URLS[0]}"
-  add_action "通过 qubjetski-Client 生成配置: $CONFIG_PATH" "Generate config through qubjetski-Client: $CONFIG_PATH"
+  add_action "通过 qubjetski-Client 生成配置" "Generate config through qubjetski-Client"
   add_action "在 staging 中生成并验证，成功后再备份和提交配置" "Generate and validate in staging, then back up and commit only after success"
-  add_action "矿工名: $WORKER_NAME" "Worker: $WORKER_NAME"
-  add_action "线程: $THREADS ($(thread_mode_label "$THREAD_MODE"))" "Threads: $THREADS ($(thread_mode_label "$THREAD_MODE"))"
-  add_action "CPU: $FLAG_CPU" "CPU: $FLAG_CPU"
-  add_action "GPU: $FLAG_GPU" "GPU: $FLAG_GPU"
+  add_action "CPU: $(switch_label "$FLAG_CPU" zh)" "CPU: $(switch_label "$FLAG_CPU" en)"
+  add_action "GPU: $(switch_label "$FLAG_GPU" zh)" "GPU: $(switch_label "$FLAG_GPU" en)"
   [[ -n "$gpu_version" ]] && add_action "GPU 版本: $gpu_version" "GPU version: $gpu_version"
   [[ -n "$gpu_cards" ]] && add_action "GPU cards: $gpu_cards" "GPU cards: $gpu_cards"
   if [[ "$jetski_mode" == "pplns" ]]; then
@@ -2392,13 +2428,18 @@ prepare_minerlab() {
 
   START_ARGS=("$MINER_BINARY_PATH" "-start")
   set_command_displays
-  add_action "下载 QLAB.Z $MINERLAB_RELEASE_VERSION: ${DOWNLOAD_URLS[0]}" "Download QLAB.Z $MINERLAB_RELEASE_VERSION: ${DOWNLOAD_URLS[0]}"
-  add_action "写入新版配置: $CONFIG_PATH" "Write the new configuration: $CONFIG_PATH"
-  add_action "Minerlab username/wallet: $username" "Minerlab username/wallet: $username"
-  add_action "矿工名: $WORKER_NAME" "Worker: $WORKER_NAME"
-  add_action "线程: $THREADS ($(thread_mode_label "$THREAD_MODE"))" "Threads: $THREADS ($(thread_mode_label "$THREAD_MODE"))"
-  add_action "CPU miner: $minerlab_cpu ($cpu_version)" "CPU miner: $minerlab_cpu ($cpu_version)"
-  add_action "GPU miner: $minerlab_gpu ($minerlab_gpu_version, $gpu_cards)" "GPU miner: $minerlab_gpu ($minerlab_gpu_version, $gpu_cards)"
+  add_action "Minerlab 用户名: $username" "Minerlab username: $username"
+  add_action "QLAB.Z 版本: $MINERLAB_RELEASE_VERSION" "QLAB.Z version: $MINERLAB_RELEASE_VERSION"
+  if [[ "$minerlab_cpu" == "1" ]]; then
+    add_action "CPU 矿工: 开启 ($cpu_version)" "CPU miner: on ($cpu_version)"
+  else
+    add_action "CPU 矿工: 关闭" "CPU miner: off"
+  fi
+  if [[ "$minerlab_gpu" == "1" ]]; then
+    add_action "GPU 矿工: 开启 ($minerlab_gpu_version, $gpu_cards)" "GPU miner: on ($minerlab_gpu_version, $gpu_cards)"
+  else
+    add_action "GPU 矿工: 关闭" "GPU miner: off"
+  fi
   add_action "矿池地址: wss://qu-pool.minerlab.io/ws/$username" "Pool address: wss://qu-pool.minerlab.io/ws/$username"
   add_action "上游 binary SHA-256: $MINERLAB_BINARY_SHA256" "Upstream binary SHA-256: $MINERLAB_BINARY_SHA256"
   add_action "适配方式: 仅安装 qlab-miner，不执行上游脚本或安装 systemd" "Adapter: install only qlab-miner; do not run the upstream script or install systemd"
@@ -2433,10 +2474,8 @@ prepare_pool() {
 }
 
 print_summary() {
-  info "$(msg '执行摘要' 'Execution summary')"
+  section "$(msg '执行摘要' 'Execution summary')"
   echo "$(msg '矿池' 'Pool'): $POOL_NAME"
-  echo "$(msg '矿工类型' 'Profile family'): $PROFILE_FAMILY"
-  echo "$(msg '安装模式' 'Profile mode'): $PROFILE_MODE"
   echo "$(msg '安装目录' 'Install dir'): $INSTALL_DIR"
   echo "$(msg '配置文件' 'Config'): $CONFIG_PATH"
   echo "$(msg '日志文件' 'Log'): $LOG_PATH"
@@ -2459,7 +2498,7 @@ print_summary() {
     echo "$(msg '下载信任' 'Download trust'): $(msg '矿池官方 HTTPS 白名单' 'official pool HTTPS allowlist')"
     echo "$(msg 'SHA-256 策略' 'SHA-256 policy'): $(msg '下载后记录，用于后续缓存完整性检查' 'record after download for later cache integrity checks')"
   fi
-  echo "$(msg '操作' 'Actions'):"
+  echo "$(msg '配置与说明' 'Settings and notes'):"
   local item
   for item in "${ACTION_SUMMARY[@]}"; do
     echo "  - $item"
@@ -2630,7 +2669,7 @@ download_archive() {
     warn "$(msg '缓存文件无效、来源不同或版本已变化，将重新下载。' 'Cached file is invalid, from a different source, or outdated; downloading again.')"
   fi
 
-  echo -e "${YELLOW}download $(printf '%q' "$url") -> $(printf '%q' "$output")${NC}"
+  step "$(msg '下载' 'Download') $(printf '%q' "$url") -> $(printf '%q' "$output")"
   [[ "$DRY_RUN" -eq 1 ]] && return 0
   if ! mkdir -p -- "$(dirname "$output")"; then
     err "$(msg '无法创建下载缓存目录。' 'Could not create the download cache directory.')"
@@ -2881,7 +2920,7 @@ install_binary_from_archive() {
   download_archive "$url" "$archive"
   ensure_dir "$install_dir"
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    echo -e "${YELLOW}extract '$archive' and copy '$binary_name' into '$install_dir'${NC}"
+    step "$(msg '解压并复制' 'Extract and copy') '$binary_name': '$archive' -> '$install_dir'"
     return 0
   fi
 
@@ -2943,8 +2982,8 @@ prepare_jetski_runtime() {
   [[ "$FLAG_CPU" == "1" ]] && cpu_value="true"
   [[ "$FLAG_GPU" == "1" ]] && gpu_value="true"
 
-  echo -e "${YELLOW}$(msg '在临时目录生成并验证 JetSki 配置:' 'Generate and validate JetSki config in a staging directory:') $CONFIG_PATH${NC}"
-  echo -e "${YELLOW}$SETUP_CMD${NC}"
+  step "$(msg '在临时目录生成并验证 JetSki 配置:' 'Generate and validate JetSki config in a staging directory:') $CONFIG_PATH"
+  step "$SETUP_CMD"
   if [[ "$DRY_RUN" -eq 1 ]]; then
     return 0
   fi
@@ -3082,7 +3121,7 @@ start_miner() {
   local output_path="$LOG_PATH"
   local attempt
 
-  echo -e "${YELLOW}$START_CMD${NC}"
+  step "$START_CMD"
   [[ "$DRY_RUN" -eq 1 ]] && return 0
 
   if [[ -L "$MINER_BINARY_PATH" || ! -f "$MINER_BINARY_PATH" || ! -x "$MINER_BINARY_PATH" ]]; then
@@ -3156,7 +3195,7 @@ authorize_existing_miners() {
     err "$(msg '--yes 不会静默启动第二个 miner；请先停止，或显式添加 --stop-existing。' '--yes will not silently start a second miner; stop it first or explicitly add --stop-existing.')"
     return 1
   fi
-  if ask_yes_no "$(msg '是否在改写安装文件前停止以上进程?' 'Stop the processes above before changing installation files?')" 1; then
+  if ask_yes_no "$(msg '是否在改写安装文件前停止以上进程?' 'Stop the processes above before changing installation files?')" 0; then
     STOP_EXISTING=1
     return 0
   fi
@@ -3262,8 +3301,7 @@ check_status() {
 }
 
 result_card() {
-  echo
-  info "$(msg '结果' 'Result')"
+  section "$(msg '结果' 'Result')"
   if [[ "$DRY_RUN" -eq 1 ]]; then
     msg '状态: 仅完成预演，未执行安装或启动' 'Status: dry-run only; nothing was installed or started'
     msg '预演模式未执行任何文件或进程变更；可能只读取了少量上游发布元数据。' 'Dry-run made no file or process changes; it may only have read small upstream release metadata.'

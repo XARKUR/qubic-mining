@@ -16,6 +16,8 @@ mkdir -p "$HOME/qubic-miner" && cd "$HOME/qubic-miner" && miner_script=$(curl -f
 
 已有本地脚本时，运行 `./miner-install.sh`。想先预览配置和命令，可运行 `./miner-install.sh --dry-run`：它不会下载矿工、改写文件或启动进程，但可能读取少量上游发布信息。
 
+终端中会用颜色区分标题、操作、警告和错误；设置 `NO_COLOR=1` 可关闭颜色，重定向输出时也不会写入颜色代码。
+
 ## 高级：无交互运行
 
 替换示例中的身份信息，然后**只选一条**运行。每条命令都会从 GitHub 获取脚本，不需要克隆或保存项目。
@@ -132,7 +134,7 @@ QLI 的 access token 会检查格式和有效期。JetSki 的 `worker`、Minerla
 ./miner-install.sh --stop
 ```
 
-`--no-start` 只安装和写配置，不启动。`--force-download` 重新下载并替换已验证的本地矿工。非交互 `--yes` 模式检测到已有矿工时，只有显式加上 `--stop-existing` 才会先停止它。查看日志时按 Ctrl+C 只会退出查看器，后台矿工仍会运行；需要停止时使用 `--stop`。
+`--no-start` 只安装和写配置，不启动。`--force-download` 重新下载并替换已验证的本地矿工。切换矿池时，如果需要停止已有矿工，交互确认默认是“否”；非交互 `--yes` 模式则必须显式加上 `--stop-existing`。查看日志时按 Ctrl+C 只会退出查看器，后台矿工仍会运行；需要停止时使用 `--stop`。
 
 运行文件保存在工作目录下的 `miners/` 和 `downloads/`，不会纳入本仓库。公开 `appsettings.json`、access token 或日志前请先检查并脱敏。
 

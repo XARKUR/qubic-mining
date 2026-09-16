@@ -16,6 +16,8 @@ This command immediately executes the current `main` branch. If you want to insp
 
 If you already have the script locally, run `./miner-install.sh`. Use `./miner-install.sh --dry-run` to preview the configuration and commands without downloading a miner, changing files, or starting a process. A dry run may read small upstream release metadata.
 
+On a terminal, colors distinguish headings, actions, warnings, and errors. Set `NO_COLOR=1` to disable them; redirected output contains no color codes.
+
 ## Advanced: non-interactive run
 
 Replace the identity placeholder, then run **one** of these commands. Each command fetches the script from GitHub without cloning or saving the project.
@@ -132,7 +134,7 @@ The installer allows one known miner from this directory to run at a time. At th
 ./miner-install.sh --stop
 ```
 
-`--no-start` installs and configures without starting. `--force-download` replaces a verified local miner with a fresh download. In non-interactive `--yes` mode, an existing running miner is stopped only if you also pass `--stop-existing`. Pressing Ctrl+C while viewing logs exits the viewer; the miner continues in the background until you stop it.
+`--no-start` installs and configures without starting. `--force-download` replaces a verified local miner with a fresh download. When switching pools, the interactive confirmation to stop an existing miner defaults to no; non-interactive `--yes` requires an explicit `--stop-existing`. Pressing Ctrl+C while viewing logs exits the viewer; the miner continues in the background until you stop it.
 
 Runtime files live in `miners/` and `downloads/` under the working directory and are excluded from this repository. Do not publish your `appsettings.json`, access tokens, or logs without reviewing them.
 

@@ -140,6 +140,34 @@ main() {
   expect_status "interactive EOF exits instead of looping" 1 \
     timeout 5 "$SCRIPT" --dry-run --lang=en
 
+  local confirmation_output confirmation_status
+  confirmation_output="$(printf 'maybe\nn\n' | "$SCRIPT" qli 0 "$ADDRESS" audit \
+    --cpu --no-gpu --dry-run --lang=en 2>&1)"
+  confirmation_status=$?
+  if [[ "$confirmation_status" -eq 0 \
+    && "$confirmation_output" == *"Please enter y or n."* \
+    && "$(printf '%s' "$confirmation_output" | grep -o 'Proceed with these actions?' | wc -l)" -eq 2 ]]; then
+    pass "invalid confirmation is explained and prompted again"
+  else
+    fail "invalid confirmation should prompt again (exit $confirmation_status)"
+  fi
+
+  local safety_library safety_output safety_status
+  safety_library="$TEST_ROOT/miner-install-library.sh"
+  sed '/^main "\$@"$/d' "$SCRIPT" > "$safety_library"
+  safety_output="$(printf '\n' | bash -c '
+    source "$1"
+    LANG_CHOICE=en
+    known_miners_running() { printf "%s\n" "mock miner"; }
+    authorize_existing_miners
+  ' _ "$safety_library" 2>&1)"
+  safety_status=$?
+  if [[ "$safety_status" -eq 1 && "$safety_output" == *"Stop the processes above before changing installation files? [y/N]:"* ]]; then
+    pass "stopping an existing miner defaults to no"
+  else
+    fail "existing miner stop should require an explicit yes (exit $safety_status)"
+  fi
+
   expect_status "removed XMR options are rejected" 1 \
     "$SCRIPT" qli 0 "$ADDRESS" audit --xmr-cpu --yes --dry-run --lang=en
 
@@ -211,7 +239,7 @@ main() {
     "$SCRIPT" minerlab audituser 0 audit --no-cpu --gpu --yes --dry-run --lang=en
 
   expect_output "Minerlab supports CPU-only QLAB.Z mode" \
-    '^  - GPU miner: 0 \(CUDA, all\)$' \
+    '^  - GPU miner: off$' \
     "$SCRIPT" minerlab audituser 2 audit --cpu --no-gpu --yes --dry-run --lang=en
 
   # shellcheck disable=SC2016
