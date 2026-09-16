@@ -232,6 +232,11 @@ section() {
   printf '\n%b%s%b\n' "$HEADING" "$*" "$NC"
 }
 
+show_logo() {
+  printf '\n%b%s%b\n' "$HEADING" \
+    $'+---------------------------+\n|           QOOLS           |\n|   Qubic Miner Installer   |\n+---------------------------+' "$NC"
+}
+
 step() {
   printf '%b%s%b\n' "$BLUE" "$*" "$NC"
 }
@@ -3441,6 +3446,7 @@ main() {
   validate_action_arguments
   trap handle_interrupt INT
 
+  show_logo
   environment_check
   handle_action_mode
 

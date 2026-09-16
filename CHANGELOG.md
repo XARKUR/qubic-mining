@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- 安装器启动时在环境检查前显示 QOOLS ASCII 标识。
 - 新增 `--alias-ip`；交互式矿工名提示也可输入 `ip`，用本机 IPv4 命名矿工，适用于 QLI、JetSki 和 Minerlab。
 - 新下载矿工后展示来源 URL、发布方参考地址、实际/预期 SHA-256 及对比结果；交互模式确认后才安装，`--yes` 保持自动化行为，hash 不一致仍直接拒绝。
 - 在 README 中说明下载来源和校验边界；发布包 SHA-256 改为可移植的相对文件名，CI 的 checkout Action 固定到准确提交。
