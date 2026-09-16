@@ -12,6 +12,8 @@ mkdir -p "$HOME/qubic-miner" && cd "$HOME/qubic-miner" && miner_script=$(curl -f
 
 这条命令直接从 GitHub 运行脚本，不保存项目副本。矿工下载、配置和日志会保存在 `$HOME/qubic-miner`。首次运行先选择语言，再按提示选择矿池和设备。请使用普通用户，不要用 root 执行安装。
 
+提示输入 `miner 名称` 或 `worker 名称` 时，直接回车使用方括号中的主机名；输入 `ip` 自动使用本机 IPv4；也可以直接输入自定义名称或 IP。自动选 IP 失败时，检查网络接口或手动输入名称。
+
 该命令会立即执行当前 `main` 分支。若要先检查确切代码，请从固定提交下载脚本，阅读后再运行。
 
 已有本地脚本时，运行 `./miner-install.sh`。想先预览配置和命令，可运行 `./miner-install.sh --dry-run`：它不会下载矿工、改写文件或启动进程，但可能读取少量上游发布信息。
@@ -45,6 +47,8 @@ mkdir -p "$HOME/qubic-miner" && cd "$HOME/qubic-miner" && \
 
 `--` 把后面的参数交给安装脚本；`--yes` 跳过交互确认，但仍会校验下载文件。可先给选中的命令加上 `--dry-run` 预演，确认后去掉它正式安装。如果已经保存了脚本，直接使用 `./miner-install.sh` 加同样的参数即可。若已有矿工在运行，`--yes` 默认拒绝继续；只有你明确添加 `--stop-existing` 才会先停止它。
 
+多设备管理时，可以删掉示例中的 `alias` 并加上 `--alias-ip`，让矿工名使用本机 IPv4。JetSki 也可以直接写成 `jetski YOUR_60_LETTER_QUBIC_WALLET 8 --alias-ip`，第二个位置参数此时是线程数。
+
 ## 选择矿池
 
 | 矿池 | 需要提供的身份信息 | 矿工 | 模式 |
@@ -62,7 +66,7 @@ mkdir -p "$HOME/qubic-miner" && cd "$HOME/qubic-miner" && \
 | 矿池 | 位置参数 | 默认值和要求 |
 | --- | --- | --- |
 | QLI | `qli <threads> <identity> [alias]` | `identity` 为 access token 或 60 位大写 Qubic 地址；`alias` 默认主机名。使用 `--ignore-threads N` 时改为 `qli <identity> [alias]`，不要再传线程数。 |
-| JetSki | `jetski <wallet> [worker] [threads]` | `wallet` 为 60 位大写 Qubic 地址；`worker` 默认主机名，且应在矿池中唯一；线程数省略时自动。 |
+| JetSki | `jetski <wallet> [worker] [threads]` | `wallet` 为 60 位大写 Qubic 地址；`worker` 默认主机名，且应在矿池中唯一；线程数省略时自动。使用 `--alias-ip` 时，也可以写成 `jetski <wallet> [threads]`。 |
 | Minerlab | `minerlab <username> [threads] [alias]` | `username` 必填；`alias` 默认主机名；启用 CPU 且省略线程数时默认使用 `nproc-2`（至少 1）。 |
 
 QLI 和 JetSki 默认启用 CPU、关闭 GPU；Minerlab 默认关闭 CPU、启用 GPU。QLI 默认 PPS，JetSki 默认 PPLNS。线程数和 `--ignore-threads` 的值必须是不带前导零的非负整数；位置参数中的线程数 `0` 表示自动，`--ignore-threads 0` 表示不预留线程。
@@ -94,6 +98,7 @@ QLI 的 access token 会检查格式和有效期。JetSki 的 `worker`、Minerla
 | --- | --- |
 | `--cpu` / `--no-cpu` | 全部矿池；启用或关闭 CPU。 |
 | `--gpu` / `--no-gpu` | 全部矿池；启用或关闭 GPU。Minerlab 始终拒绝同时关闭 CPU/GPU；QLI 在命令行指定矿池或使用 `--yes` 时拒绝，JetSki 在 `--yes` 时拒绝。 |
+| `--alias-ip` | 全部矿池；用本机默认出站网卡的 IPv4 作为 alias/worker 名称，覆盖手填或环境变量中的名称。取不到时尝试本机其他 IPv4，仍失败则报错；不会查询公网 IP。IP 变化后需重新运行脚本更新名称。 |
 | `--ignore-threads N` | 全部矿池；CPU 线程数设为 `nproc-N`，要求 `N` 小于 CPU 总线程数，不能与 `--no-cpu` 同用。QLI 的位置参数顺序见上表。 |
 | `--use-avx2` | QLI、Minerlab；启用 CPU 时将其版本设为 AVX2，也接受 `avx2`。 |
 | `--gpu-version CUDA` / `--gpu-version AMD` | 全部矿池；指定 GPU 版本，需要启用 GPU。 |

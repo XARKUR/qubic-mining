@@ -41,6 +41,7 @@ FLAG_GPU_VERSION=""
 FLAG_GPU_CARDS=""
 FLAG_IGNORE_THREADS=""
 FLAG_USE_AVX2=0
+FLAG_ALIAS_IP=0
 JETSKI_ARCHIVE_NAME="qubjetski.PPLNS-latest.tar.gz"
 MAX_ARCHIVE_ENTRIES=256
 MAX_ARCHIVE_MEMBER_BYTES=536870912
@@ -105,6 +106,7 @@ usage() {
 矿池：
   qli       ./miner-install.sh qli <线程数> <accessToken|qubicAddress> [矿工名]
   jetski    ./miner-install.sh jetski <wallet> [workername] [CPU线程数] [--cpu] [--gpu] [--pplns|--solo]
+            使用 --alias-ip 时：jetski <wallet> [CPU线程数]
   minerlab  ./miner-install.sh minerlab <username> [CPU线程数] [矿工名]
 
 选项：
@@ -119,6 +121,7 @@ usage() {
   --stop              停止当前或指定矿池 miner
   --stop-existing     改写安装文件前停止已知 miner 进程
   --force-download    不复用已有下载/二进制，强制重新下载
+  --alias-ip          使用本机默认出站网卡的 IPv4 作为矿工名
   --ignore-threads N  使用 nproc-N 个线程
   --use-avx2          QLI/Minerlab 设置 CPU version=AVX2
   --cpu | --no-cpu
@@ -142,6 +145,7 @@ Usage:
 Pools:
   qli       ./miner-install.sh qli <threads> <accessToken|qubicAddress> [alias]
   jetski    ./miner-install.sh jetski <wallet> [workername] [CPU threads] [--cpu] [--gpu] [--pplns|--solo]
+            With --alias-ip: jetski <wallet> [CPU threads]
   minerlab  ./miner-install.sh minerlab <username> [CPU threads] [alias]
 
 Options:
@@ -156,6 +160,7 @@ Options:
   --stop
   --stop-existing
   --force-download
+  --alias-ip          Use the default outbound interface's IPv4 as the worker name
   --ignore-threads N
   --use-avx2          Set CPU version=AVX2 for QLI/Minerlab
   --cpu | --no-cpu
@@ -325,6 +330,10 @@ parse_args() {
       --force-download)
         FORCE_DOWNLOAD=1
         ;;
+      --alias-ip)
+        FLAG_ALIAS_IP=1
+        record_option "alias-ip"
+        ;;
       --ignore-threads)
         require_option_value "$1" "${2:-}"
         FLAG_IGNORE_THREADS="$2"
@@ -449,13 +458,13 @@ option_allowed_for_pool() {
   local pool="$1"
   local option="$2"
   case "$pool:$option" in
-    qli:ignore-threads|qli:use-avx2|qli:cpu|qli:gpu|qli:gpu-version|qli:gpu-cards|qli:pps|qli:solo|qli:auto-update)
+    qli:alias-ip|qli:ignore-threads|qli:use-avx2|qli:cpu|qli:gpu|qli:gpu-version|qli:gpu-cards|qli:pps|qli:solo|qli:auto-update)
       return 0
       ;;
-    jetski:ignore-threads|jetski:cpu|jetski:gpu|jetski:gpu-version|jetski:gpu-cards|jetski:pplns|jetski:solo)
+    jetski:alias-ip|jetski:ignore-threads|jetski:cpu|jetski:gpu|jetski:gpu-version|jetski:gpu-cards|jetski:pplns|jetski:solo)
       return 0
       ;;
-    minerlab:ignore-threads|minerlab:use-avx2|minerlab:cpu|minerlab:gpu|minerlab:gpu-version|minerlab:gpu-cards)
+    minerlab:alias-ip|minerlab:ignore-threads|minerlab:use-avx2|minerlab:cpu|minerlab:gpu|minerlab:gpu-version|minerlab:gpu-cards)
       return 0
       ;;
   esac
@@ -628,6 +637,23 @@ ask() {
     fi
     err "$(msg '该字段不能为空。' 'This value is required.')"
   done
+}
+
+ask_worker_name() {
+  local var_name="$1" zh_label="$2" en_label="$3" default="$4"
+  local value="" prompt
+  prompt="$(msg "$zh_label（输入 ip 使用本机 IPv4）" "$en_label (enter ip for local IPv4)")"
+  if ! read_answer value "$prompt [$default]: "; then
+    echo
+    err "$(msg '输入已结束，安装已取消。' 'Input closed; installation cancelled.')"
+    exit 1
+  fi
+  if [[ "${value,,}" == "ip" ]]; then
+    value="$(resolve_ip_alias)" || return 1
+  else
+    value="${value:-$default}"
+  fi
+  printf -v "$var_name" '%s' "$value"
 }
 
 ask_yes_no() {
@@ -879,6 +905,51 @@ cpu_count() {
 
 default_worker() {
   hostname 2>/dev/null || echo "miner"
+}
+
+valid_alias_ipv4() {
+  local first second third fourth
+  [[ "$1" =~ ^(0|[1-9][0-9]{0,2})(\.(0|[1-9][0-9]{0,2})){3}$ ]] || return 1
+  IFS=. read -r first second third fourth <<< "$1"
+  (( first > 0 && first < 224 && first != 127
+    && second <= 255 && third <= 255 && fourth <= 255 )) || return 1
+  (( first != 169 || second != 254 ))
+}
+
+local_ipv4() {
+  local candidate addresses
+  local -a address_list=()
+
+  # Route lookup only reads the local routing table; it sends no packet.
+  if command -v ip >/dev/null 2>&1; then
+    candidate="$(ip -4 route get 1.1.1.1 2>/dev/null \
+      | awk '{for (i = 1; i < NF; i++) if ($i == "src") {print $(i + 1); exit}}')"
+    if valid_alias_ipv4 "$candidate"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  fi
+
+  if command -v hostname >/dev/null 2>&1; then
+    addresses="$(hostname -I 2>/dev/null)" || addresses=""
+    read -r -a address_list <<< "$addresses"
+    for candidate in "${address_list[@]}"; do
+      if valid_alias_ipv4 "$candidate"; then
+        printf '%s\n' "$candidate"
+        return 0
+      fi
+    done
+  fi
+  return 1
+}
+
+resolve_ip_alias() {
+  local address
+  if ! address="$(local_ipv4)"; then
+    err "$(msg '无法获取本机可用的 IPv4；请检查网络接口，或改为手动指定矿工名。' 'Could not find a usable local IPv4; check the network interface or set the worker name manually.')"
+    return 1
+  fi
+  printf '%s\n' "$address"
 }
 
 set_threads() {
@@ -1779,13 +1850,16 @@ prepare_qli() {
   if [[ -z "$token" && "$AUTO_YES" -eq 0 ]]; then
     ask "$(msg 'accessToken 或 qubicAddress' 'accessToken or qubicAddress')" token "" 1
   fi
-  if [[ -z "$alias" && "$AUTO_YES" -eq 0 ]]; then
-    ask "$(msg 'miner 名称' 'miner alias')" alias "$(default_worker)" 0
+  if [[ -z "$alias" && "$AUTO_YES" -eq 0 && "$FLAG_ALIAS_IP" -eq 0 ]]; then
+    ask_worker_name alias 'miner 名称' 'miner alias' "${QLI_ALIAS:-$(default_worker)}" || exit 1
   fi
 
   token="$(trim "${token:-${QLI_ACCESS_TOKEN:-${QLI_QUBIC_ADDRESS:-${QLI_PAYOUT_ID:-}}}}")"
   raw_threads="${raw_threads:-$INPUT_THREADS}"
   alias="${alias:-${QLI_ALIAS:-$(default_worker)}}"
+  if [[ "$FLAG_ALIAS_IP" -eq 1 ]]; then
+    alias="$(resolve_ip_alias)" || exit 1
+  fi
 
   if [[ -z "$token" ]]; then
     err "$(msg 'QLI 需要 accessToken 或 qubicAddress。' 'QLI requires accessToken or qubicAddress.')"
@@ -2028,8 +2102,16 @@ prepare_jetski() {
 
   if [[ "$PARAM_MODE" -eq 1 || "$AUTO_YES" -eq 1 ]]; then
     wallet="${POOL_ARGS[0]:-${JETSKI_WALLET:-}}"
-    worker="${POOL_ARGS[1]:-${JETSKI_WORKER:-$(default_worker)}}"
-    raw_threads="${POOL_ARGS[2]:-$INPUT_THREADS}"
+    if [[ "$FLAG_ALIAS_IP" -eq 1 && "${#POOL_ARGS[@]}" -eq 2 \
+      && "${POOL_ARGS[1]}" =~ ^-?[0-9]+$ ]]; then
+      raw_threads="${POOL_ARGS[1]}"
+    else
+      worker="${POOL_ARGS[1]:-}"
+      if [[ -z "$worker" && "$AUTO_YES" -eq 1 ]]; then
+        worker="${JETSKI_WORKER:-$(default_worker)}"
+      fi
+      raw_threads="${POOL_ARGS[2]:-$INPUT_THREADS}"
+    fi
   fi
 
   if [[ -n "${JETSKI_PPLNS:-}" ]]; then
@@ -2078,8 +2160,8 @@ prepare_jetski() {
   if [[ -z "$wallet" && "$AUTO_YES" -eq 0 ]]; then
     ask "$(msg 'JetSki wallet 地址' 'JetSki wallet address')" wallet "" 1
   fi
-  if [[ -z "$worker" && "$AUTO_YES" -eq 0 ]]; then
-    ask "$(msg 'worker 名称，需保持唯一' 'worker name, must be unique')" worker "$(default_worker)" 0
+  if [[ -z "$worker" && "$AUTO_YES" -eq 0 && "$FLAG_ALIAS_IP" -eq 0 ]]; then
+    ask_worker_name worker 'worker 名称，需保持唯一' 'worker name, must be unique' "${JETSKI_WORKER:-$(default_worker)}" || exit 1
   fi
   if [[ "$AUTO_YES" -eq 0 && "$jetski_mode_explicit" -eq 0 ]]; then
     if ask_yes_no "$(msg '使用 JetSki PPLNS 模式?' 'Use JetSki PPLNS mode?')" 1; then
@@ -2091,6 +2173,9 @@ prepare_jetski() {
 
   wallet="$(trim "$wallet")"
   worker="$(trim "$worker")"
+  if [[ "$FLAG_ALIAS_IP" -eq 1 ]]; then
+    worker="$(resolve_ip_alias)" || exit 1
+  fi
   raw_threads="$(trim "$raw_threads")"
   gpu_version="$(trim "$gpu_version")"
   gpu_cards="$(trim "$gpu_cards")"
@@ -2277,7 +2362,10 @@ prepare_minerlab() {
   if [[ "$PARAM_MODE" -eq 1 || "$AUTO_YES" -eq 1 ]]; then
     username="${POOL_ARGS[0]:-${MINERLAB_USERNAME:-}}"
     raw_threads="${POOL_ARGS[1]:-$INPUT_THREADS}"
-    worker="${POOL_ARGS[2]:-${MINERLAB_WORKER:-$(default_worker)}}"
+    worker="${POOL_ARGS[2]:-}"
+    if [[ -z "$worker" && "$AUTO_YES" -eq 1 ]]; then
+      worker="${MINERLAB_WORKER:-$(default_worker)}"
+    fi
   fi
   if [[ -z "$minerlab_cpu" && -n "${MINERLAB_CPU:-}" ]]; then
     assign_bool minerlab_cpu MINERLAB_CPU "$MINERLAB_CPU"
@@ -2292,8 +2380,8 @@ prepare_minerlab() {
   if [[ -z "$username" && "$AUTO_YES" -eq 0 ]]; then
     ask "$(msg 'Minerlab username' 'Minerlab username')" username "" 1
   fi
-  if [[ -z "$worker" && "$AUTO_YES" -eq 0 ]]; then
-    ask "$(msg 'miner 名称' 'miner alias')" worker "${MINERLAB_WORKER:-$(default_worker)}" 0
+  if [[ -z "$worker" && "$AUTO_YES" -eq 0 && "$FLAG_ALIAS_IP" -eq 0 ]]; then
+    ask_worker_name worker 'miner 名称' 'miner alias' "${MINERLAB_WORKER:-$(default_worker)}" || exit 1
   fi
   if [[ "$AUTO_YES" -eq 0 && ( "$PARAM_MODE" -eq 0 || "${#POOL_ARGS[@]}" -eq 0 ) ]]; then
     if [[ -z "$minerlab_cpu" ]]; then
@@ -2319,13 +2407,18 @@ prepare_minerlab() {
   username="$(trim "$username")"
   raw_threads="$(trim "$raw_threads")"
   worker="$(trim "${worker:-${MINERLAB_WORKER:-$(default_worker)}}")"
+  if [[ "$FLAG_ALIAS_IP" -eq 1 ]]; then
+    worker="$(resolve_ip_alias)" || exit 1
+  fi
   minerlab_gpu_version="$(trim "$minerlab_gpu_version")"
   minerlab_gpu_cards="$(trim "$minerlab_gpu_cards")"
 
   if [[ "$minerlab_cpu" == "0" && "${#POOL_ARGS[@]}" -eq 2 && -n "$raw_threads" && ! "$raw_threads" =~ ^[0-9]+$ ]]; then
-    worker="$raw_threads"
+    if [[ "$FLAG_ALIAS_IP" -eq 0 ]]; then
+      worker="$raw_threads"
+      add_action "CPU miner 已关闭，第二个位置参数按矿工名处理" "Second positional argument treated as worker because CPU mining is disabled"
+    fi
     raw_threads=""
-    add_action "CPU miner 已关闭，第二个位置参数按矿工名处理" "Second positional argument treated as worker because CPU mining is disabled"
   fi
   if [[ -z "$username" ]]; then
     err "$(msg 'Minerlab 需要 username。' 'Minerlab requires username.')"

@@ -59,6 +59,22 @@ expect_output() {
   fi
 }
 
+expect_stdin_output() {
+  local name="$1" pattern="$2" input="$3"
+  shift 3
+  local output status
+
+  output="$(printf '%s' "$input" | "$@" 2>&1)"
+  status=$?
+
+  if [[ "$status" -eq 0 ]] && printf '%s\n' "$output" | grep -Eq -- "$pattern"; then
+    pass "$name"
+  else
+    fail "$name (exit $status, missing pattern: $pattern)"
+    printf '%s\n' "$output" | tail -n 16 >&2
+  fi
+}
+
 expect_output_without() {
   local name="$1"
   local required="$2"
@@ -84,7 +100,7 @@ base64url() {
 }
 
 main() {
-  local bad_json_token valid_token token_header token_signature curl_log
+  local bad_json_token valid_token token_header token_signature curl_log alias_fixture_dir
   token_header="$(printf '%s' '{"alg":"RS256","typ":"JWT"}' | base64url)"
   token_signature="$(printf 'A%.0s' {1..120})"
   valid_token="$token_header.$(printf '%s' '{"iss":"https://qubic.li/","aud":"https://qubic.li/","nbf":0,"exp":4102444800}' | base64url).$token_signature"
@@ -95,6 +111,23 @@ main() {
   else
     fail "bash syntax"
   fi
+
+  alias_fixture_dir="$TEST_ROOT/alias-fixtures"
+  mkdir -p "$alias_fixture_dir"
+  cat > "$alias_fixture_dir/ip" <<'EOF'
+#!/usr/bin/env bash
+[[ "$*" == '-4 route get 1.1.1.1' ]] || exit 1
+printf '%s\n' "${ALIAS_IP_ROUTE_OUTPUT:-1.1.1.1 via 192.168.50.1 dev eth0 src 192.168.50.42}"
+EOF
+  cat > "$alias_fixture_dir/hostname" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == '-I' ]]; then
+  printf '%s\n' "${ALIAS_IP_HOSTNAME_IPS:-192.168.50.42 127.0.0.1}"
+else
+  printf '%s\n' 'fixture-host'
+fi
+EOF
+  chmod 0755 "$alias_fixture_dir/ip" "$alias_fixture_dir/hostname"
 
   expect_status "--yes requires a pool" 1 \
     timeout 3 "$SCRIPT" --yes --dry-run --lang=en
@@ -200,6 +233,89 @@ main() {
 
   expect_output "QLI valid dry-run" '^Pool: QLI$' \
     "$SCRIPT" qli 0 "$ADDRESS" audit --no-cpu --gpu --yes --dry-run --lang=en
+
+  expect_output "QLI --alias-ip overrides an explicit alias" \
+    '^Worker: 192\.168\.50\.42$' \
+    env PATH="$alias_fixture_dir:$PATH" "$SCRIPT" qli 0 "$ADDRESS" old-name \
+      --alias-ip --cpu --no-gpu --yes --dry-run --lang=en
+
+  expect_output "QLI --alias-ip reaches appsettings.json" \
+    '"alias": "192\.168\.50\.42"' \
+    env PATH="$alias_fixture_dir:$PATH" bash -c '
+      source "$1"
+      parse_args qli 0 "$2" old-name --alias-ip --cpu --no-gpu --yes --dry-run --lang=en
+      prepare_pool
+      printf "%s\n" "$CONFIG_CONTENT"
+    ' _ "$safety_library" "$ADDRESS"
+
+  expect_output "JetSki --alias-ip uses IPv4 as the worker name" \
+    '^Worker: 192\.168\.50\.42$' \
+    env PATH="$alias_fixture_dir:$PATH" "$SCRIPT" jetski "$ADDRESS" 8 \
+      --alias-ip --cpu --no-gpu --pplns --yes --dry-run --lang=en
+
+  expect_output "JetSki --alias-ip keeps the second positional thread count" \
+    '^Threads: 8 \(fixed\)$' \
+    env PATH="$alias_fixture_dir:$PATH" "$SCRIPT" jetski "$ADDRESS" 8 \
+      --alias-ip --cpu --no-gpu --pplns --yes --dry-run --lang=en
+
+  expect_output "JetSki --alias-ip reaches client setup" \
+    '^Setup command: .* -workername 192\.168\.50\.42 ' \
+    env PATH="$alias_fixture_dir:$PATH" "$SCRIPT" jetski "$ADDRESS" 8 \
+      --alias-ip --cpu --no-gpu --pplns --yes --dry-run --lang=en
+
+  expect_output "Minerlab --alias-ip overrides an explicit alias" \
+    '^Worker: 192\.168\.50\.42$' \
+    env PATH="$alias_fixture_dir:$PATH" "$SCRIPT" minerlab audituser 2 old-name \
+      --alias-ip --cpu --no-gpu --yes --dry-run --lang=en
+
+  expect_output "Minerlab --alias-ip reaches appsettings.json" \
+    '"alias": "192\.168\.50\.42"' \
+    env PATH="$alias_fixture_dir:$PATH" bash -c '
+      source "$1"
+      parse_args minerlab audituser 2 old-name --alias-ip --cpu --no-gpu --yes --dry-run --lang=en
+      prepare_pool
+      printf "%s\n" "$CONFIG_CONTENT"
+    ' _ "$safety_library"
+
+  expect_stdin_output "QLI alias prompt accepts ip for local IPv4" \
+    '^Worker: 192\.168\.50\.42$' $'ip\nn\n' \
+    env PATH="$alias_fixture_dir:$PATH" "$SCRIPT" qli 0 "$ADDRESS" \
+      --cpu --no-gpu --pps --dry-run --lang=en
+
+  expect_stdin_output "QLI alias prompt keeps hostname on Enter" \
+    '^Worker: fixture-host$' $'\nn\n' \
+    env PATH="$alias_fixture_dir:$PATH" "$SCRIPT" qli 0 "$ADDRESS" \
+      --cpu --no-gpu --pps --dry-run --lang=en
+
+  expect_stdin_output "JetSki worker prompt accepts ip for local IPv4" \
+    '^Worker: 192\.168\.50\.42$' "${ADDRESS}"$'\nip\n0\nn\n' \
+    env PATH="$alias_fixture_dir:$PATH" "$SCRIPT" jetski \
+      --cpu --no-gpu --pplns --dry-run --lang=en
+
+  expect_stdin_output "Minerlab alias prompt accepts ip for local IPv4" \
+    '^Worker: 192\.168\.50\.42$' $'audituser\nip\nn\n2\nn\n' \
+    env PATH="$alias_fixture_dir:$PATH" "$SCRIPT" minerlab \
+      --cpu --no-gpu --dry-run --lang=en
+
+  expect_output "--alias-ip falls back to another local IPv4" \
+    '^Worker: 10\.20\.30\.40$' \
+    env PATH="$alias_fixture_dir:$PATH" \
+      ALIAS_IP_ROUTE_OUTPUT='1.1.1.1 dev eth0 src 127.0.0.1' \
+      ALIAS_IP_HOSTNAME_IPS='::1 10.20.30.40' \
+      "$SCRIPT" qli 0 "$ADDRESS" --alias-ip --cpu --no-gpu --yes --dry-run --lang=en
+
+  local alias_failure_output alias_failure_status
+  alias_failure_output="$(env PATH="$alias_fixture_dir:$PATH" \
+    ALIAS_IP_ROUTE_OUTPUT='1.1.1.1 dev eth0 src 127.0.0.1' \
+    ALIAS_IP_HOSTNAME_IPS='::1 169.254.10.1' \
+    "$SCRIPT" qli 0 "$ADDRESS" --alias-ip --cpu --no-gpu --yes --dry-run --lang=en 2>&1)"
+  alias_failure_status=$?
+  if [[ "$alias_failure_status" -eq 1 \
+    && "$alias_failure_output" == *"Could not find a usable local IPv4"* ]]; then
+    pass "--alias-ip fails clearly without a usable IPv4"
+  else
+    fail "--alias-ip should fail clearly without a usable IPv4 (exit $alias_failure_status)"
+  fi
 
   expect_output "QLI 3.8.10 uses the audited pinned SHA-256" \
     '^Expected SHA-256: 08385d75f1ab4861edaf8462c3c7aa4a6343c1d068a9bf6ea94c2096eae62113$' \

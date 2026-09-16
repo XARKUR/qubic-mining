@@ -12,6 +12,8 @@ mkdir -p "$HOME/qubic-miner" && cd "$HOME/qubic-miner" && miner_script=$(curl -f
 
 The script runs from GitHub without saving a copy of this project. Miner downloads, configuration, and logs are kept in `$HOME/qubic-miner`. On the first run, choose a language, then follow the pool and device prompts. Use a regular user account, not root.
 
+At the `miner alias` or `worker name` prompt, press Enter to use the hostname shown in brackets, type `ip` to use this machine's local IPv4 automatically, or enter a custom name or IP. If automatic IP detection fails, check the network interface or enter a name manually.
+
 This command immediately executes the current `main` branch. If you want to inspect the exact script first, download it from a fixed commit and read it before running it.
 
 If you already have the script locally, run `./miner-install.sh`. Use `./miner-install.sh --dry-run` to preview the configuration and commands without downloading a miner, changing files, or starting a process. A dry run may read small upstream release metadata.
@@ -45,6 +47,8 @@ mkdir -p "$HOME/qubic-miner" && cd "$HOME/qubic-miner" && \
 
 The `--` passes the remaining arguments to the installer. `--yes` skips prompts but still checks downloaded files. Add `--dry-run` to your chosen command to preview it, then remove the flag to install. If you saved the script locally, use `./miner-install.sh` with the same arguments. With `--yes`, an existing running miner blocks installation unless you explicitly add `--stop-existing`.
 
+For multiple devices, omit `alias` from an example and add `--alias-ip` to use this machine's IPv4 as the worker name. JetSki also accepts `jetski YOUR_60_LETTER_QUBIC_WALLET 8 --alias-ip`, where the second positional argument is the thread count.
+
 ## Choose a pool
 
 | Pool | Identity to provide | Miner | Modes |
@@ -62,7 +66,7 @@ The local syntax is `./miner-install.sh <pool> [positional arguments] [options]`
 | Pool | Positional arguments | Defaults and requirements |
 | --- | --- | --- |
 | QLI | `qli <threads> <identity> [alias]` | `identity` is an access token or 60-letter uppercase Qubic address; `alias` defaults to the hostname. With `--ignore-threads N`, use `qli <identity> [alias]` and omit the positional thread count. |
-| JetSki | `jetski <wallet> [worker] [threads]` | `wallet` is a 60-letter uppercase Qubic address; `worker` defaults to the hostname and should be unique in the pool; omitted threads mean automatic. |
+| JetSki | `jetski <wallet> [worker] [threads]` | `wallet` is a 60-letter uppercase Qubic address; `worker` defaults to the hostname and should be unique in the pool; omitted threads mean automatic. With `--alias-ip`, `jetski <wallet> [threads]` also works. |
 | Minerlab | `minerlab <username> [threads] [alias]` | `username` is required; `alias` defaults to the hostname; with CPU enabled, omitted threads default to `nproc-2` (at least 1). |
 
 QLI and JetSki default to CPU on and GPU off; Minerlab defaults to CPU off and GPU on. QLI defaults to PPS and JetSki to PPLNS. Thread counts and `--ignore-threads` values must be non-negative integers without leading zeroes; a positional thread count of `0` means automatic, while `--ignore-threads 0` reserves no threads.
@@ -94,6 +98,7 @@ QLI access tokens are checked for format and expiry. JetSki `worker` and Minerla
 | --- | --- |
 | `--cpu` / `--no-cpu` | All pools; enable or disable CPU. |
 | `--gpu` / `--no-gpu` | All pools; enable or disable GPU. Minerlab always rejects both CPU/GPU off; QLI rejects it when the pool is named on the command line or with `--yes`, and JetSki rejects it with `--yes`. |
+| `--alias-ip` | All pools; use the default outbound interface's local IPv4 as the alias/worker name, overriding a positional or environment-provided name. If unavailable, try other local IPv4 addresses, then fail clearly; no public-IP lookup is made. Run the installer again if the IP changes. |
 | `--ignore-threads N` | All pools; use `nproc-N` CPU threads. `N` must be smaller than the CPU count and cannot be used with `--no-cpu`. QLI changes its positional order as shown above. |
 | `--use-avx2` | QLI and Minerlab; select the AVX2 version with CPU enabled. Bare `avx2` is also accepted. |
 | `--gpu-version CUDA` / `--gpu-version AMD` | All pools; select a GPU version, with GPU enabled. |
