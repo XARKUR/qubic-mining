@@ -1,0 +1,25 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  shell-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Syntax checks
+        run: |
+          bash -n miner-install.sh
+          bash -n tests/fixtures/curl
+          bash -n tests/miner-install-tests.sh
+          bash -n tests/miner-install-integration.sh
+          bash -n scripts/package-release.sh
+      - name: Fast regression tests
+        run: tests/miner-install-tests.sh
+      - name: Isolated integration tests
+        run: tests/miner-install-integration.sh

@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+
+set -u
+
+url="${!#}"
+if [[ -n "${CURL_FIXTURE_LOG:-}" ]]; then
+  printf '%s\n' "$url" >> "$CURL_FIXTURE_LOG"
+fi
+case "$url" in
+  https://dl.qubic.li/cloud-init/qli-Service-install-auto.sh)
+    printf '%s\n' 'package=qli-Client-3.8.10-Linux-x64.tar.gz'
+    ;;
+  https://dl.minerlab.io/miners/QLAB.Z.hash)
+    if [[ "${MINERLAB_HASH_FIXTURE_INVALID:-0}" == "1" ]]; then
+      printf '%s\n' 'sha256:not-a-hash' 'version:4.1' 'linux_sha256:not-a-hash'
+      exit 0
+    fi
+    cat <<'EOF'
+sha256:018c32c1fef526ea3557c11786870e0ca6ea6a135c31f47b0dfff0360ed1f515
+version:4.1
+release:2026-08-26T21:47:04Z
+linux_sha256:9459dd19197d70332a804bee64b9ae8ca8c3408d14ff6ae556fce5335190c01a
+windows_sha256:
+EOF
+    ;;
+  https://api.github.com/repos/jtskxx/JETSKI-QUBIC-POOL/releases/latest)
+    cat <<'EOF'
+{
+  "assets": [
+    {
+      "digest": "sha256:ebc87c47e518d3d98ae26603fdae78c9b37dd47c678b30373f9939a9685d9328",
+      "browser_download_url": "https://github.com/jtskxx/JETSKI-QUBIC-POOL/releases/download/latest/qubjetski.PPLNS-latest.tar.gz"
+    },
+    {
+      "digest": "sha256:807b264d60dcb6d02fdf128f195e4cf7e2cdfe5aa3e59906a109e8544cf16d2d",
+      "browser_download_url": "https://github.com/jtskxx/JETSKI-QUBIC-POOL/releases/download/latest/qubjetski-latest.tar.gz"
+    }
+  ]
+}
+EOF
+    ;;
+  https://github.com/jtskxx/JETSKI-QUBIC-POOL/releases/download/latest/qubjetski.PPLNS-latest.hash)
+    printf '%s\n' 'ebc87c47e518d3d98ae26603fdae78c9b37dd47c678b30373f9939a9685d9328'
+    ;;
+  https://github.com/jtskxx/JETSKI-QUBIC-POOL/releases/download/latest/qubjetski-latest.hash)
+    printf '%s\n' '807b264d60dcb6d02fdf128f195e4cf7e2cdfe5aa3e59906a109e8544cf16d2d'
+    ;;
+  *)
+    printf 'Unexpected test URL: %s\n' "$url" >&2
+    exit 22
+    ;;
+esac

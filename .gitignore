@@ -1,0 +1,14 @@
+# Local preferences and runtime output
+/.miner-install.conf
+/.miner-install.lock
+/backup/
+/archives/
+/downloads/
+/dist/
+/logs/
+/miners/
+/minerlab/qlab-install.sh
+
+*.log
+*.lock
+*.previous
