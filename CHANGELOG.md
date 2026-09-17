@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- JetSki Linux 安装改用官方无版本号的 `qubjetski-latest.tar.gz`，PPLNS/Solo 通过配置参数切换；旧 PPLNS/版本化包自动迁移，并固定当前包 SHA-256 作为离线校验回退。
 - 安装器启动时在环境检查前显示 QOOLS ASCII 标识。
 - 新增 `--alias-ip`；交互式矿工名提示也可输入 `ip`，用本机 IPv4 命名矿工，适用于 QLI、JetSki 和 Minerlab。
 - 新下载矿工后展示来源 URL、发布方参考地址、实际/预期 SHA-256 及对比结果；交互模式确认后才安装，`--yes` 保持自动化行为，hash 不一致仍直接拒绝。

@@ -341,9 +341,24 @@ EOF
     "$SCRIPT" jetski "$ADDRESS" audit --no-cpu --gpu --pplns \
       --yes --dry-run --lang=en
 
-  expect_output "JetSki matches the digest to the exact neighboring asset URL" \
-    '^Expected SHA-256: 807b264d60dcb6d02fdf128f195e4cf7e2cdfe5aa3e59906a109e8544cf16d2d$' \
+  expect_output "JetSki PPLNS uses the versionless release package" \
+    '^Download https://github\.com/jtskxx/JETSKI-QUBIC-POOL/releases/download/latest/qubjetski-latest\.tar\.gz -> ' \
+    "$SCRIPT" jetski "$ADDRESS" audit --no-cpu --gpu --pplns \
+      --yes --dry-run --lang=en
+
+  expect_output "JetSki Solo uses the same versionless release package" \
+    '^Download https://github\.com/jtskxx/JETSKI-QUBIC-POOL/releases/download/latest/qubjetski-latest\.tar\.gz -> ' \
     "$SCRIPT" jetski "$ADDRESS" audit --no-cpu --gpu --solo \
+      --yes --dry-run --lang=en
+
+  expect_output "JetSki matches the digest to the stable asset, not neighboring assets" \
+    '^Expected SHA-256: 650588e0f852cd88bb17c896ae175dffe9418507f7e0839bea9879a8b067b593$' \
+    "$SCRIPT" jetski "$ADDRESS" audit --no-cpu --gpu --solo \
+      --yes --dry-run --lang=en
+
+  expect_output "JetSki uses the verified pinned hash when GitHub metadata is unavailable" \
+    '^Verification source: installer pinned SHA-256$' \
+    env JETSKI_RELEASE_API_UNAVAILABLE=1 "$SCRIPT" jetski "$ADDRESS" audit --no-cpu --gpu --pplns \
       --yes --dry-run --lang=en
 
   expect_output "Minerlab uses the QLAB.Z endpoint" \

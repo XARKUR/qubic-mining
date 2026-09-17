@@ -24,26 +24,27 @@ windows_sha256:
 EOF
     ;;
   https://api.github.com/repos/jtskxx/JETSKI-QUBIC-POOL/releases/latest)
+    if [[ "${JETSKI_RELEASE_API_UNAVAILABLE:-0}" == "1" ]]; then
+      exit 22
+    fi
     cat <<'EOF'
 {
   "assets": [
     {
-      "digest": "sha256:ebc87c47e518d3d98ae26603fdae78c9b37dd47c678b30373f9939a9685d9328",
+      "digest": "sha256:5d61f6340e655e01ee99889c250da72313bfbaa29689f3ea78212c03f56684eb",
       "browser_download_url": "https://github.com/jtskxx/JETSKI-QUBIC-POOL/releases/download/latest/qubjetski.PPLNS-latest.tar.gz"
     },
     {
-      "digest": "sha256:807b264d60dcb6d02fdf128f195e4cf7e2cdfe5aa3e59906a109e8544cf16d2d",
+      "digest": "sha256:650588e0f852cd88bb17c896ae175dffe9418507f7e0839bea9879a8b067b593",
       "browser_download_url": "https://github.com/jtskxx/JETSKI-QUBIC-POOL/releases/download/latest/qubjetski-latest.tar.gz"
+    },
+    {
+      "digest": "sha256:6ea1362c8f048647f42f414798496a069364c6390a9d0b5179e780288265e9a2",
+      "browser_download_url": "https://github.com/jtskxx/JETSKI-QUBIC-POOL/releases/download/latest/qubjetski-Linux-v4.3.tar.gz"
     }
   ]
 }
 EOF
-    ;;
-  https://github.com/jtskxx/JETSKI-QUBIC-POOL/releases/download/latest/qubjetski.PPLNS-latest.hash)
-    printf '%s\n' 'ebc87c47e518d3d98ae26603fdae78c9b37dd47c678b30373f9939a9685d9328'
-    ;;
-  https://github.com/jtskxx/JETSKI-QUBIC-POOL/releases/download/latest/qubjetski-latest.hash)
-    printf '%s\n' '807b264d60dcb6d02fdf128f195e4cf7e2cdfe5aa3e59906a109e8544cf16d2d'
     ;;
   *)
     printf 'Unexpected test URL: %s\n' "$url" >&2

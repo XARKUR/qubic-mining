@@ -57,6 +57,8 @@ For multiple devices, omit `alias` from an example and add `--alias-ip` to use t
 | JetSki | 60-letter Qubic wallet | `qubjetski-Client` | PPLNS or Solo |
 | Minerlab | Minerlab username | `qlab-miner` (QLAB.Z) | CPU, GPU, or both |
 
+Both JetSki modes now use the versionless `qubjetski-latest.tar.gz` from the [official release](https://github.com/jtskxx/JETSKI-QUBIC-POOL/releases/latest). The installer extracts only `qubjetski-Client`, configures PPLNS with `-pplns`, and configures Solo without it. Existing JetSki clients installed from differently named archives are migrated on the next install.
+
 `8` is the CPU thread count; `0` selects automatic threads. A QLI access token passed in a non-interactive command may be visible in shell history or the process list; protect your real token.
 
 ## Complete parameter reference
@@ -104,7 +106,7 @@ QLI access tokens are checked for format and expiry. JetSki `worker` and Minerla
 | `--gpu-version CUDA` / `--gpu-version AMD` | All pools; select a GPU version, with GPU enabled. |
 | `--gpu-cards LIST` | All pools; with GPU enabled, specify comma-separated GPU indices, each `-1` or a non-negative integer, such as `-1,-1,0`. Minerlab also accepts `all`. |
 | `--pps` / `--solo` | QLI; choose PPS or Solo. |
-| `--pplns` / `--solo` | JetSki; choose the PPLNS or Solo package. |
+| `--pplns` / `--solo` | JetSki; choose the PPLNS or Solo configuration mode. |
 | `--auto-update` / `--no-auto-update` | QLI only; write `autoUpdate=true/false` to configuration; the field is omitted by default. |
 
 ### Environment variables

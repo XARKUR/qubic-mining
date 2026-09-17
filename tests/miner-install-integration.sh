@@ -15,8 +15,8 @@ PIDS=()
 LAST_SANDBOX=""
 QLI_URL="https://dl.qubic.li/downloads/qli-Client-3.8.10-Linux-x64.tar.gz"
 QLI_ARCHIVE_SHA="08385d75f1ab4861edaf8462c3c7aa4a6343c1d068a9bf6ea94c2096eae62113"
-JETSKI_URL="https://github.com/jtskxx/JETSKI-QUBIC-POOL/releases/download/latest/qubjetski.PPLNS-latest.tar.gz"
-JETSKI_ARCHIVE_SHA="ebc87c47e518d3d98ae26603fdae78c9b37dd47c678b30373f9939a9685d9328"
+JETSKI_URL="https://github.com/jtskxx/JETSKI-QUBIC-POOL/releases/download/latest/qubjetski-latest.tar.gz"
+JETSKI_ARCHIVE_SHA="650588e0f852cd88bb17c896ae175dffe9418507f7e0839bea9879a8b067b593"
 
 pass() {
   printf 'PASS: %s\n' "$1"
@@ -944,9 +944,10 @@ EOF
 }
 
 
-test_jetski_mode_switch_requires_correct_asset() {
-  local sandbox library binary old_url new_url
-  local solo_url="${JETSKI_URL/qubjetski.PPLNS/qubjetski}"
+test_jetski_legacy_mode_packages_migrate() {
+  local sandbox library binary old_url
+  local pplns_url="https://github.com/jtskxx/JETSKI-QUBIC-POOL/releases/download/latest/qubjetski.PPLNS-latest.tar.gz"
+  local versioned_url="https://github.com/jtskxx/JETSKI-QUBIC-POOL/releases/download/latest/qubjetski-Linux-v4.3.tar.gz"
   new_sandbox
   sandbox="$LAST_SANDBOX"
   mkdir -p "$sandbox/miners/jetski"
@@ -954,21 +955,19 @@ test_jetski_mode_switch_requires_correct_asset() {
   cp /bin/true "$binary"
   library="$sandbox/library.sh"
   sed '/^main "\$@"$/d' "$sandbox/miner-install.sh" > "$library"
-  for old_url in "$JETSKI_URL" "$solo_url"; do
-    new_url="$JETSKI_URL"
-    [[ "$old_url" == "$JETSKI_URL" ]] && new_url="$solo_url"
+  for old_url in "$pplns_url" "$versioned_url"; do
     write_manifest "$sandbox/miners/jetski" qubjetski-Client "$old_url" "$JETSKI_ARCHIVE_SHA"
     if ! bash -c '
       source "$1"
       LANG_CHOICE=en
       AUTO_YES=1
       should_install_binary "$2" "$3" "$4"
-    ' _ "$library" "$new_url" "$binary" "$sandbox/miners/jetski/.miner-install.version" >/dev/null 2>&1; then
-      fail "JetSki must replace the binary when switching either mode"
+    ' _ "$library" "$JETSKI_URL" "$binary" "$sandbox/miners/jetski/.miner-install.version" >/dev/null 2>&1; then
+      fail "JetSki must replace legacy PPLNS or versioned packages"
       return
     fi
   done
-  pass "JetSki replaces the binary for both PPLNS/Solo mode switches"
+  pass "JetSki migrates legacy PPLNS and versioned clients to the stable package"
 }
 
 test_stop_failure_preserves_install_files() {
@@ -1070,7 +1069,7 @@ test_legacy_minerlab_binary_is_detected() {
 
 main() {
   trap cleanup EXIT
-  test_jetski_mode_switch_requires_correct_asset
+  test_jetski_legacy_mode_packages_migrate
   test_stop_failure_preserves_install_files
   test_minerlab_qlab_config
   test_legacy_minerlab_binary_is_detected

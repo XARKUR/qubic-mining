@@ -57,6 +57,8 @@ mkdir -p "$HOME/qubic-miner" && cd "$HOME/qubic-miner" && \
 | JetSki | 60 位 Qubic 钱包地址 | `qubjetski-Client` | PPLNS 或 Solo |
 | Minerlab | Minerlab 用户名 | `qlab-miner`（QLAB.Z） | CPU、GPU 或同时使用 |
 
+JetSki 两种模式现在都使用[官方发布页](https://github.com/jtskxx/JETSKI-QUBIC-POOL/releases/latest)中不带版本号的 `qubjetski-latest.tar.gz`。脚本只提取 `qubjetski-Client`，通过 `-pplns` 配置 PPLNS，省略它则配置 Solo。已有不同文件名的 JetSki 客户端会在下一次安装时迁移。
+
 `8` 是 CPU 线程数；`0` 表示自动。QLI 的 access token 若放在非交互命令中，可能出现在 shell 历史或进程列表；使用真实 token 时请注意保护。
 
 ## 完整参数
@@ -104,7 +106,7 @@ QLI 的 access token 会检查格式和有效期。JetSki 的 `worker`、Minerla
 | `--gpu-version CUDA` / `--gpu-version AMD` | 全部矿池；指定 GPU 版本，需要启用 GPU。 |
 | `--gpu-cards LIST` | 全部矿池；启用 GPU 时指定 GPU index，逗号分隔，每项为 `-1` 或非负整数，例如 `-1,-1,0`。Minerlab 还接受 `all`。 |
 | `--pps` / `--solo` | QLI；选择 PPS 或 Solo。 |
-| `--pplns` / `--solo` | JetSki；选择 PPLNS 或 Solo 包。 |
+| `--pplns` / `--solo` | JetSki；选择 PPLNS 或 Solo 配置模式。 |
 | `--auto-update` / `--no-auto-update` | 仅 QLI；在配置中写入 `autoUpdate=true/false`；未指定时省略该字段。 |
 
 ### 环境变量

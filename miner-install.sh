@@ -42,7 +42,7 @@ FLAG_GPU_CARDS=""
 FLAG_IGNORE_THREADS=""
 FLAG_USE_AVX2=0
 FLAG_ALIAS_IP=0
-JETSKI_ARCHIVE_NAME="qubjetski.PPLNS-latest.tar.gz"
+JETSKI_ARCHIVE_NAME="qubjetski-latest.tar.gz"
 MAX_ARCHIVE_ENTRIES=256
 MAX_ARCHIVE_MEMBER_BYTES=536870912
 MAX_ARCHIVE_TOTAL_BYTES=1073741824
@@ -989,16 +989,6 @@ set_threads() {
   THREADS="0"
 }
 
-github_latest_asset_url() {
-  local repo="$1"
-  local pattern="$2"
-  curl -fsSL --connect-timeout 8 --max-time 15 \
-    "https://api.github.com/repos/$repo/releases/latest" 2>/dev/null \
-    | sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
-    | grep -Ei "$pattern" \
-    | head -n1
-}
-
 qli_latest_url() {
   local script package
   script="$(curl -fsSL --connect-timeout 8 --max-time 20 --max-filesize 1048576 \
@@ -1010,21 +1000,6 @@ qli_latest_url() {
   fi
   printf 'https://dl.qubic.li/downloads/qli-Client-3.8.10-Linux-x64.tar.gz\n'
   return 1
-}
-
-jetski_latest_url() {
-  local mode="$1"
-  local pattern fallback url
-  if [[ "$mode" == "solo" ]]; then
-    pattern='qubjetski-latest\.tar\.gz$'
-    fallback='https://github.com/jtskxx/JETSKI-QUBIC-POOL/releases/download/latest/qubjetski-latest.tar.gz'
-  else
-    pattern='qubjetski\.PPLNS-latest\.tar\.gz$'
-    fallback='https://github.com/jtskxx/JETSKI-QUBIC-POOL/releases/download/latest/qubjetski.PPLNS-latest.tar.gz'
-  fi
-
-  url="$(github_latest_asset_url "jtskxx/JETSKI-QUBIC-POOL" "$pattern" || true)"
-  printf '%s\n' "${url:-$fallback}"
 }
 
 set_download_trust() {
@@ -1117,22 +1092,6 @@ github_release_asset_sha256() {
     }
     found && /<\/li>/ { exit }
   ')"
-  [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || return 1
-  printf '%s\n' "$digest"
-}
-
-jetski_release_sha256() {
-  local mode="$1"
-  local hash_name raw digest
-  if [[ "$mode" == "solo" ]]; then
-    hash_name="qubjetski-latest.hash"
-  else
-    hash_name="qubjetski.PPLNS-latest.hash"
-  fi
-  raw="$(curl -fsSL --connect-timeout 8 --max-time 20 --max-filesize 1024 \
-    "https://github.com/jtskxx/JETSKI-QUBIC-POOL/releases/download/latest/$hash_name" \
-    2>/dev/null)" || return 1
-  digest="$(printf '%s' "$raw" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
   [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || return 1
   printf '%s\n' "$digest"
 }
@@ -2275,26 +2234,17 @@ prepare_jetski() {
     fi
   fi
   WORKER_NAME="$worker"
-  JETSKI_ARCHIVE_NAME="qubjetski.PPLNS-latest.tar.gz"
-  if [[ "$jetski_mode" == "solo" ]]; then
-    JETSKI_ARCHIVE_NAME="qubjetski-latest.tar.gz"
-  fi
-  DOWNLOAD_URLS=("$(jetski_latest_url "$jetski_mode")")
-  local jetski_digest jetski_hash_digest jetski_pinned_digest
+  DOWNLOAD_URLS=("https://github.com/jtskxx/JETSKI-QUBIC-POOL/releases/download/latest/$JETSKI_ARCHIVE_NAME")
+  local jetski_digest jetski_pinned_digest
   jetski_digest="$(github_release_asset_sha256 "${DOWNLOAD_URLS[0]}" || true)"
   if [[ -n "$jetski_digest" ]]; then
     set_download_trust "${DOWNLOAD_URLS[0]}" "$jetski_digest" "GitHub release digest"
   else
-    jetski_hash_digest="$(jetski_release_sha256 "$jetski_mode" || true)"
-    if [[ -n "$jetski_hash_digest" ]]; then
-      set_download_trust "${DOWNLOAD_URLS[0]}" "$jetski_hash_digest" "JetSki official .hash"
+    jetski_pinned_digest="$(expected_archive_sha256 "${DOWNLOAD_URLS[0]}" || true)"
+    if [[ -n "$jetski_pinned_digest" ]]; then
+      set_download_trust "${DOWNLOAD_URLS[0]}" "$jetski_pinned_digest" "installer pinned SHA-256"
     else
-      jetski_pinned_digest="$(expected_archive_sha256 "${DOWNLOAD_URLS[0]}" || true)"
-      if [[ -n "$jetski_pinned_digest" ]]; then
-        set_download_trust "${DOWNLOAD_URLS[0]}" "$jetski_pinned_digest" "installer pinned SHA-256"
-      else
-        warn "$(msg 'JetSki 未提供可读取的远端 hash，将使用官方 GitHub Release 地址并记录本地 SHA-256。' 'No readable JetSki remote hash is available; the official GitHub Release URL will be used and a local SHA-256 will be recorded.')"
-      fi
+      warn "$(msg 'JetSki 未提供可读取的远端 hash，将使用官方 GitHub Release 地址并记录本地 SHA-256。' 'No readable JetSki remote hash is available; the official GitHub Release URL will be used and a local SHA-256 will be recorded.')"
     fi
   fi
 
@@ -2658,11 +2608,8 @@ expected_archive_sha256() {
     *qli-Client-3.6.1-Linux-x64.tar.gz)
       printf '%s\n' "7e0cb8955421545feb51189fbe1ecc4ba20a1a3aaa4f0cf4f59031c0dc8a2fc6"
       ;;
-    *qubjetski.PPLNS-latest.tar.gz)
-      printf '%s\n' "ebc87c47e518d3d98ae26603fdae78c9b37dd47c678b30373f9939a9685d9328"
-      ;;
     *qubjetski-latest.tar.gz)
-      printf '%s\n' "807b264d60dcb6d02fdf128f195e4cf7e2cdfe5aa3e59906a109e8544cf16d2d"
+      printf '%s\n' "650588e0f852cd88bb17c896ae175dffe9418507f7e0839bea9879a8b067b593"
       ;;
     *)
       return 1
@@ -2904,11 +2851,11 @@ should_install_binary() {
   installed_archive="$(state_value "$manifest" archive_sha256)"
   recorded_binary="$(state_value "$manifest" binary)"
   recorded_binary_sha="$(state_value "$manifest" binary_sha256)"
-  # PPLNS and Solo are different clients, not interchangeable versions.
-  # The asset name also identifies the mode in pre-existing manifests.
+  # Replace the legacy PPLNS package or versioned Linux package with the stable asset.
   if [[ "$(basename "$binary")" == "qubjetski-Client" \
-    && "${installed_url##*/}" != "${url##*/}" ]]; then
-    warn "$(msg 'JetSki 模式包已变化，必须安装所选模式的客户端。' 'The JetSki mode asset changed; installing the client for the selected mode.')"
+    && "${url##*/}" == "$JETSKI_ARCHIVE_NAME" \
+    && "${installed_url##*/}" =~ ^(qubjetski\.PPLNS-latest|qubjetski-Linux-v[0-9]+(\.[0-9]+)+)\.tar\.gz$ ]]; then
+    warn "$(msg 'JetSki 已改用统一下载包，正在替换旧客户端。' 'JetSki now uses one stable download package; replacing the legacy client.')"
     return 0
   fi
   if [[ "$recorded_binary" == "$(basename "$binary")" \
