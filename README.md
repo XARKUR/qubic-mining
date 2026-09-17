@@ -114,7 +114,7 @@ Automation can also use these variables. Positional arguments and command-line o
 | Scope | Variables |
 | --- | --- |
 | General | `MINER_POOL` (`qli`, `jetski`, `minerlab`) and `THREADS` (CPU threads). System `LANG` is used when no language is otherwise selected. |
-| QLI identity | `QLI_ACCESS_TOKEN`, `QLI_QUBIC_ADDRESS`, `QLI_PAYOUT_ID` (legacy alias), in fallback order. |
+| QLI identity | `QLI_ACCESS_TOKEN`, `QLI_QUBIC_ADDRESS`, in fallback order. |
 | QLI settings | `QLI_ALIAS`, `QLI_PPS`, `QLI_CPU`, `QLI_GPU`, `QLI_GPU_VERSION`, `QLI_GPU_CARDS`, `QLI_AUTO_UPDATE`, `QLI_USE_AVX2`. |
 | JetSki | `JETSKI_WALLET`, `JETSKI_WORKER`, `JETSKI_MODE` (`pplns`/`solo`), `JETSKI_PPLNS`, `JETSKI_CPU`, `JETSKI_GPU`, `JETSKI_GPU_VERSION`, `JETSKI_GPU_CARDS`. |
 | Minerlab | `MINERLAB_USERNAME`, `MINERLAB_WORKER`, `MINERLAB_CPU`, `MINERLAB_GPU`, `MINERLAB_GPU_VERSION`, `MINERLAB_GPU_CARDS`, `MINERLAB_USE_AVX2`. |
